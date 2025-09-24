@@ -14,7 +14,16 @@ def _dict_factory(cursor, row):
 
 
 def init_db() -> None:
-    with sqlite3.connect(DB_PATH) as conn:
+    # Initialize database with sane defaults for concurrency under tests
+    with sqlite3.connect(DB_PATH, timeout=5.0) as conn:
+        # Improve concurrency: WAL allows readers and writers to operate concurrently
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            conn.execute("PRAGMA busy_timeout=3000;")
+        except Exception:
+            # Pragmas are best-effort; continue if not supported
+            pass
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS documents (
@@ -48,17 +57,29 @@ def init_db() -> None:
 
 @contextmanager
 def get_conn(dict_mode: bool = False):
-    conn = sqlite3.connect(DB_PATH)
+    # Use a connection timeout to reduce 'database is locked' errors under concurrency
+    conn = sqlite3.connect(DB_PATH, timeout=5.0)
     if dict_mode:
         conn.row_factory = _dict_factory
     try:
+        # Ensure a reasonable busy timeout at the connection level
+        try:
+            conn.execute("PRAGMA busy_timeout=3000;")
+        except Exception:
+            pass
         yield conn
     finally:
         conn.close()
 
 
 class DocumentRepository:
-    def create_document(self, file_name: str, file_type: str, file_size: int, uploaded_by: str = "system") -> Dict[str, Any]:
+    def create_document(
+        self,
+        file_name: str,
+        file_type: str,
+        file_size: int,
+        uploaded_by: str = "system",
+    ) -> Dict[str, Any]:
         now = datetime.utcnow().isoformat()
         doc_id = str(uuid.uuid4())
         with get_conn() as conn:
@@ -70,7 +91,9 @@ class DocumentRepository:
                 (doc_id, file_name, file_type, file_size, now, now),
             )
             conn.commit()
-        self.log_action(doc_id, "create_document", "pending", {"uploaded_by": uploaded_by})
+        self.log_action(
+            doc_id, "create_document", "pending", {"uploaded_by": uploaded_by}
+        )
         return {"id": doc_id, "status": "pending", "created_at": now, "updated_at": now}
 
     def update_status(
@@ -108,12 +131,20 @@ class DocumentRepository:
             row = cur.fetchone()
             if row and row.get("parsed_data"):
                 try:
-                    row["parsed_data"] = json.loads(row["parsed_data"]) if row["parsed_data"] else None
+                    row["parsed_data"] = (
+                        json.loads(row["parsed_data"]) if row["parsed_data"] else None
+                    )
                 except Exception:
                     row["parsed_data"] = None
             return row
 
-    def log_action(self, document_id: str, action: str, status: str, details: Optional[Dict[str, Any]] = None) -> None:
+    def log_action(
+        self,
+        document_id: str,
+        action: str,
+        status: str,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
         with get_conn() as conn:
             conn.execute(
                 """
@@ -134,4 +165,3 @@ class DocumentRepository:
 
 repo = DocumentRepository()
 init_db()
-

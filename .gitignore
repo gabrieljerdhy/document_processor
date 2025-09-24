@@ -1,0 +1,62 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.*
+
+# Build artifacts
+build/
+dist/
+.eggs/
+*.egg-info/
+wheels/
+
+# Coverage / test caches
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+coverage.xml
+
+# Logs
+*.log
+logs/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
+
+# SQLite and local databases
+*.sqlite3
+*.db
+# Explicitly ignore the app DB used by the service
+/document-processor/app/app.db
+
+# Local scratch files produced during manual runs
+/document-processor/upload_*.json
+/document-processor/*.bin
+
+# Docker / env files
+/document-processor/.env
+/document-processor/.env.local
+
+# Node/yarn (if any future UI gets added)
+node_modules/
+npm-debug.log*
+yarn-error.log
+pnpm-debug.log
+
